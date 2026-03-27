@@ -5,6 +5,8 @@ import { Task, TaskStatus, TaskPriority } from './models/Task';
 import { TaskStorage } from './api/taskStorage';
 import { User } from './models/User';
 import { UserService } from './api/userService';
+import { Notification as AppNotification } from './models/Notification';
+import { NotificationStorage } from './api/notificationStorage';
 import trashSvg from './assets/icons/trash.svg?raw';
 import editSvg from './assets/icons/edit.svg?raw';
 import bookSvg from './assets/icons/book.svg?raw';
@@ -30,11 +32,15 @@ const TASK_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height
 const fmtDate = (iso: string | null | undefined) =>
   iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
 
+const fmtDateTime = (iso: string) =>
+  new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
 export class App {
   private projectStorage = new ProjectStorage();
   private storyStorage = new StoryStorage();
   private taskStorage = new TaskStorage();
   private userService = UserService.getInstance();
+  private notificationStorage = new NotificationStorage();
   private root: HTMLElement;
   private fieldIdCounter = 0;
 
@@ -46,6 +52,9 @@ export class App {
   private currentEditTaskId: string | null = null;
   private taskFormContextStoryId: string | null = null;
   private currentTaskDetailId: string | null = null;
+  private currentNotifId: string | null = null;
+  private notifDialogQueue: AppNotification[] = [];
+  private notifDialogActive = false;
 
   // Main view DOM
   private mainView!: HTMLElement;
@@ -83,6 +92,18 @@ export class App {
   private taskDetailContent!: HTMLElement;
   private taskDetailBackLabel!: HTMLSpanElement;
 
+  // Notification views DOM
+  private notifBadge!: HTMLElement;
+  private notifListView!: HTMLElement;
+  private notifListContainer!: HTMLElement;
+  private notifDetailView!: HTMLElement;
+  private notifDetailContentEl!: HTMLElement;
+  private notifDialog!: HTMLElement;
+  private notifDialogTitle!: HTMLElement;
+  private notifDialogMessage!: HTMLElement;
+  private notifDialogPriority!: HTMLElement;
+  private notifDialogViewBtn!: HTMLButtonElement;
+
   // Task form modal DOM
   private taskFormModal!: HTMLElement;
   private taskFormTitle!: HTMLElement;
@@ -107,13 +128,19 @@ export class App {
     this.buildDetailSection();
     this.buildTaskDetailView();
     this.buildTaskFormModal();
+    this.buildNotifListView();
+    this.buildNotifDetailView();
+    this.buildNotifDialog();
 
     this.root.append(
       this.buildHeader(),
       this.mainView,
       this.detailSection,
       this.taskDetailView,
+      this.notifListView,
+      this.notifDetailView,
       this.taskFormModal,
+      this.notifDialog,
     );
   }
 
@@ -141,12 +168,21 @@ export class App {
       localStorage.setItem('theme', dark ? 'dark' : 'light');
     });
 
+    const notifBellWrapper = el('div', 'notif-bell-wrapper');
+    const notifBellBtn = el('button', 'notif-bell-btn');
+    notifBellBtn.type = 'button';
+    notifBellBtn.setAttribute('aria-label', 'Notifications');
+    notifBellBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`;
+    notifBellBtn.addEventListener('click', () => this.showNotifList());
+    this.notifBadge = el('span', 'notif-bell-dot notif-bell-dot--hidden');
+    notifBellWrapper.append(notifBellBtn, this.notifBadge);
+
     const userInfo = el('div', 'app-header__user');
     const avatar = el('span', 'user-avatar', `${user.firstName[0]}${user.lastName[0]}`);
     const name = el('span', 'user-name', `${user.firstName} ${user.lastName}`);
     userInfo.append(avatar, name);
 
-    right.append(themeBtn, userInfo);
+    right.append(themeBtn, notifBellWrapper, userInfo);
     header.append(brand, right);
     return header;
   }
@@ -259,6 +295,7 @@ export class App {
     const name = this.projectNameInput.value.trim();
     const description = this.projectDescInput.value.trim();
     if (!name || !description) return;
+    const isNew = !this.currentEditProjectId;
     const saved = this.withStorage(() => {
       if (this.currentEditProjectId) {
         this.projectStorage.update({ id: this.currentEditProjectId, name, description });
@@ -266,7 +303,21 @@ export class App {
         this.projectStorage.create({ name, description });
       }
     });
-    if (saved) this.cancelProjectForm();
+    if (saved) {
+      if (isNew) {
+        this.userService.getAllUsers()
+          .filter((u) => u.role === 'admin')
+          .forEach((admin) => {
+            this.sendNotification({
+              title: 'New project created',
+              message: `A new project "${name}" has been created.`,
+              priority: 'high',
+              recipientId: admin.id,
+            });
+          });
+      }
+      this.cancelProjectForm();
+    }
   }
 
   private loadProjectForEdit(id: string) {
@@ -367,6 +418,8 @@ export class App {
     this.mainView.classList.add('view--hidden');
     this.detailSection.classList.remove('view--hidden');
     this.taskDetailView.classList.add('view--hidden');
+    this.notifListView.classList.add('view--hidden');
+    this.notifDetailView.classList.add('view--hidden');
     this.cancelStoryForm();
     this.refreshStories();
   }
@@ -375,6 +428,8 @@ export class App {
     this.mainView.classList.remove('view--hidden');
     this.detailSection.classList.add('view--hidden');
     this.taskDetailView.classList.add('view--hidden');
+    this.notifListView.classList.add('view--hidden');
+    this.notifDetailView.classList.add('view--hidden');
     this.refresh();
   }
 
@@ -525,6 +580,10 @@ export class App {
     const assigneeId = this.storyAssigneeSelect.value || null;
     if (!name || !description) return;
 
+    const prevAssigneeId = this.currentEditStoryId
+      ? (this.storyStorage.getById(this.currentEditStoryId)?.assigneeId ?? null)
+      : null;
+
     const saved = this.withStorage(() => {
       if (this.currentEditStoryId) {
         const existing = this.storyStorage.getById(this.currentEditStoryId);
@@ -536,6 +595,14 @@ export class App {
       }
     });
     if (saved) {
+      if (assigneeId && assigneeId !== prevAssigneeId) {
+        this.sendNotification({
+          title: 'Assigned to a user story',
+          message: `You have been assigned to story "${name}".`,
+          priority: 'high',
+          recipientId: assigneeId,
+        });
+      }
       this.closeStoryForm();
       this.refreshStories();
     }
@@ -763,8 +830,18 @@ export class App {
 
   private deleteTask(taskId: string) {
     if (!confirm('Delete this task?')) return;
+    const task = this.taskStorage.getById(taskId);
+    const story = task ? this.storyStorage.getById(task.storyId) : null;
     const saved = this.withStorage(() => this.taskStorage.delete(taskId));
     if (saved) {
+      if (task && story) {
+        this.sendNotification({
+          title: 'Task removed from story',
+          message: `Task "${task.name}" was removed from story "${story.name}".`,
+          priority: 'medium',
+          recipientId: story.ownerId,
+        });
+      }
       this.refreshStories();
       if (this.currentDetailTab === 'kanban') this.refreshKanban();
     }
@@ -786,9 +863,11 @@ export class App {
   private assignUserToTask(taskId: string, userId: string) {
     const task = this.taskStorage.getById(taskId);
     if (!task) return;
+    const prevAssigneeId = task.assigneeId;
 
     if (task.status === 'done') {
       this.withStorage(() => this.taskStorage.update({ ...task, assigneeId: userId }));
+      if (prevAssigneeId !== userId) this.notifyTaskAssignment(task, userId);
       this.refreshAfterTaskChange(taskId);
       return;
     }
@@ -802,7 +881,22 @@ export class App {
       });
       this.syncStoryStatus(task.storyId);
     });
-    if (saved) this.refreshAfterTaskChange(taskId);
+    if (saved) {
+      if (prevAssigneeId !== userId) this.notifyTaskAssignment(task, userId);
+      this.refreshAfterTaskChange(taskId);
+    }
+  }
+
+  private notifyTaskAssignment(task: Task, assigneeId: string): void {
+    const story = this.storyStorage.getById(task.storyId);
+    this.sendNotification({
+      title: 'Assigned to a task',
+      message: story
+        ? `You have been assigned to task "${task.name}" in story "${story.name}".`
+        : `You have been assigned to task "${task.name}".`,
+      priority: 'high',
+      recipientId: assigneeId,
+    });
   }
 
   private completeTask(taskId: string) {
@@ -817,7 +911,18 @@ export class App {
       });
       this.syncStoryStatus(task.storyId);
     });
-    if (saved) this.refreshAfterTaskChange(taskId);
+    if (saved) {
+      const story = this.storyStorage.getById(task.storyId);
+      if (story) {
+        this.sendNotification({
+          title: 'Task marked as done',
+          message: `Task "${task.name}" in story "${story.name}" is now Done.`,
+          priority: 'medium',
+          recipientId: story.ownerId,
+        });
+      }
+      this.refreshAfterTaskChange(taskId);
+    }
   }
 
   private cycleTaskStatus(taskId: string) {
@@ -837,7 +942,20 @@ export class App {
       this.taskStorage.update(updated);
       this.syncStoryStatus(task.storyId);
     });
-    if (saved) this.refreshAfterTaskChange(taskId);
+    if (saved) {
+      if (next === 'done' || next === 'doing') {
+        const story = this.storyStorage.getById(task.storyId);
+        if (story) {
+          this.sendNotification({
+            title: `Task status changed to ${next === 'done' ? 'Done' : 'In Progress'}`,
+            message: `Task "${task.name}" in story "${story.name}" is now ${next === 'done' ? 'Done' : 'In Progress'}.`,
+            priority: next === 'done' ? 'medium' : 'low',
+            recipientId: story.ownerId,
+          });
+        }
+      }
+      this.refreshAfterTaskChange(taskId);
+    }
   }
 
   private refreshAfterTaskChange(taskId: string) {
@@ -988,6 +1106,17 @@ export class App {
     });
 
     if (saved) {
+      if (!editedTaskId) {
+        const story = this.storyStorage.getById(storyId);
+        if (story) {
+          this.sendNotification({
+            title: 'New task added to your story',
+            message: `A new task "${name}" was added to story "${story.name}".`,
+            priority: 'medium',
+            recipientId: story.ownerId,
+          });
+        }
+      }
       this.closeTaskForm();
       this.refreshStories();
       if (this.currentDetailTab === 'kanban') this.refreshKanban();
@@ -1018,6 +1147,8 @@ export class App {
     this.mainView.classList.add('view--hidden');
     this.detailSection.classList.add('view--hidden');
     this.taskDetailView.classList.remove('view--hidden');
+    this.notifListView.classList.add('view--hidden');
+    this.notifDetailView.classList.add('view--hidden');
     this.renderTaskDetailContent();
   }
 
@@ -1224,6 +1355,7 @@ export class App {
   private refresh() {
     this.refreshProjects();
     this.refreshStories();
+    this.refreshNotifBadge();
   }
 
   private refreshProjects() {
@@ -1308,5 +1440,228 @@ export class App {
       this.showToast('Failed to save — storage may be full.');
       return false;
     }
+  }
+
+  // ─── Notifications: build views ───────────────────────────────────────────────
+
+  private buildNotifListView(): void {
+    this.notifListView = el('div', 'view view-notif-list view--hidden');
+
+    const backBtn = el('button', 'button button-back', '← Back');
+    backBtn.type = 'button';
+    backBtn.addEventListener('click', () => this.backFromNotifList());
+
+    const header = el('div', 'notif-list-header');
+    const title = el('h2', undefined, 'Notifications');
+    const markAllBtn = el('button', 'button button-cancel', 'Mark all as read');
+    markAllBtn.type = 'button';
+    markAllBtn.addEventListener('click', () => {
+      this.notificationStorage.markAllRead(this.userService.getLoggedUser().id);
+      this.refreshNotifBadge();
+      this.renderNotifList();
+    });
+    header.append(title, markAllBtn);
+
+    this.notifListContainer = el('div', 'notif-list');
+    this.notifListView.append(backBtn, header, this.notifListContainer);
+  }
+
+  private buildNotifDetailView(): void {
+    this.notifDetailView = el('div', 'view view-notif-detail view--hidden');
+
+    const backBtn = el('button', 'button button-back', '← Back to Notifications');
+    backBtn.type = 'button';
+    backBtn.addEventListener('click', () => this.backFromNotifDetail());
+
+    this.notifDetailContentEl = el('div', 'notif-detail-content');
+    this.notifDetailView.append(backBtn, this.notifDetailContentEl);
+  }
+
+  private buildNotifDialog(): void {
+    this.notifDialog = el('div', 'notif-dialog-container notif-dialog--hidden');
+
+    const box = el('div', 'notif-dialog-box');
+
+    const dialogHeader = el('div', 'notif-dialog__header');
+    this.notifDialogPriority = el('span', 'priority-badge');
+    const closeBtn = el('button', 'modal-close', '✕');
+    closeBtn.type = 'button';
+    closeBtn.addEventListener('click', () => this.dismissNotifDialog());
+    dialogHeader.append(this.notifDialogPriority, closeBtn);
+
+    this.notifDialogTitle = el('h3', 'notif-dialog__title');
+    this.notifDialogMessage = el('p', 'notif-dialog__message');
+
+    const dialogActions = el('div', 'notif-dialog__actions');
+    this.notifDialogViewBtn = el('button', 'button button-primary', 'View');
+    this.notifDialogViewBtn.type = 'button';
+    const dismissBtn = el('button', 'button button-cancel', 'Dismiss');
+    dismissBtn.type = 'button';
+    dismissBtn.addEventListener('click', () => this.dismissNotifDialog());
+    dialogActions.append(this.notifDialogViewBtn, dismissBtn);
+
+    box.append(dialogHeader, this.notifDialogTitle, this.notifDialogMessage, dialogActions);
+    this.notifDialog.append(box);
+  }
+
+  // ─── Notifications: navigation ────────────────────────────────────────────────
+
+  private showNotifList(): void {
+    this.mainView.classList.add('view--hidden');
+    this.detailSection.classList.add('view--hidden');
+    this.taskDetailView.classList.add('view--hidden');
+    this.notifDetailView.classList.add('view--hidden');
+    this.notifListView.classList.remove('view--hidden');
+    this.renderNotifList();
+  }
+
+  private showNotifDetail(id: string): void {
+    this.currentNotifId = id;
+    this.notificationStorage.markRead(id);
+    this.refreshNotifBadge();
+    this.mainView.classList.add('view--hidden');
+    this.detailSection.classList.add('view--hidden');
+    this.taskDetailView.classList.add('view--hidden');
+    this.notifListView.classList.add('view--hidden');
+    this.notifDetailView.classList.remove('view--hidden');
+    this.renderNotifDetail(id);
+  }
+
+  private backFromNotifList(): void {
+    this.notifListView.classList.add('view--hidden');
+    this.restorePreviousView();
+  }
+
+  private backFromNotifDetail(): void {
+    this.notifDetailView.classList.add('view--hidden');
+    this.notifListView.classList.remove('view--hidden');
+    this.renderNotifList();
+  }
+
+  private restorePreviousView(): void {
+    const taskId = this.currentTaskDetailId;
+    const activeProjectId = this.projectStorage.getActiveProjectId();
+    if (taskId && this.taskStorage.getById(taskId)) {
+      this.showTaskDetail(taskId);
+    } else if (activeProjectId && this.projectStorage.getById(activeProjectId)) {
+      this.showProjectDetail(activeProjectId);
+    } else {
+      this.showMainView();
+    }
+  }
+
+  // ─── Notifications: rendering ─────────────────────────────────────────────────
+
+  private renderNotifList(): void {
+    const user = this.userService.getLoggedUser();
+    const notifs = this.notificationStorage.getByRecipient(user.id);
+    this.notifListContainer.innerHTML = '';
+
+    if (notifs.length === 0) {
+      this.notifListContainer.append(el('p', 'empty-state', 'No notifications yet.'));
+      return;
+    }
+
+    notifs.forEach((notif) => {
+      const item = el('div', `notif-item${notif.isRead ? '' : ' notif-item--unread'}`);
+
+      const dot = el('span', `notif-item__dot${notif.isRead ? ' notif-item__dot--read' : ''}`);
+
+      const body = el('div', 'notif-item__body');
+      const header = el('div', 'notif-item__header');
+      header.append(
+        el('span', 'notif-item__title', notif.title),
+        el('span', `priority-badge priority-badge--${notif.priority}`, PRIORITY_LABELS[notif.priority]),
+        el('span', 'notif-item__date', fmtDateTime(notif.date)),
+      );
+
+      const message = el('p', 'notif-item__message', notif.message);
+      body.append(header, message);
+
+      if (!notif.isRead) {
+        const actions = el('div', 'notif-item__actions');
+        const markReadBtn = el('button', 'button button-cancel notif-item__mark-read', 'Mark as read');
+        markReadBtn.type = 'button';
+        markReadBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.notificationStorage.markRead(notif.id);
+          this.refreshNotifBadge();
+          this.renderNotifList();
+        });
+        actions.append(markReadBtn);
+        body.append(actions);
+      }
+
+      item.append(dot, body);
+      item.addEventListener('click', () => this.showNotifDetail(notif.id));
+      this.notifListContainer.append(item);
+    });
+  }
+
+  private renderNotifDetail(id: string): void {
+    const notif = this.notificationStorage.getById(id);
+    this.notifDetailContentEl.innerHTML = '';
+
+    if (!notif) {
+      this.notifDetailContentEl.append(el('p', 'empty-state', 'Notification not found.'));
+      return;
+    }
+
+    const header = el('div', 'notif-detail__header');
+    header.append(
+      el('h2', 'notif-detail__title', notif.title),
+      el('span', `priority-badge priority-badge--${notif.priority}`, PRIORITY_LABELS[notif.priority]),
+    );
+
+    const meta = el('div', 'notif-detail__meta');
+    meta.append(
+      el('span', 'notif-detail__date', fmtDateTime(notif.date)),
+      el('span', `notif-detail__status notif-detail__status--${notif.isRead ? 'read' : 'unread'}`, notif.isRead ? 'Read' : 'Unread'),
+    );
+
+    const message = el('p', 'notif-detail__message', notif.message);
+    this.notifDetailContentEl.append(header, meta, message);
+  }
+
+  // ─── Notifications: send + badge + dialog ─────────────────────────────────────
+
+  private sendNotification(data: Omit<AppNotification, 'id' | 'date' | 'isRead'>): void {
+    const notif = this.notificationStorage.create(data);
+    const currentUser = this.userService.getLoggedUser();
+    if (notif.recipientId === currentUser.id) {
+      this.refreshNotifBadge();
+      if (notif.priority === 'medium' || notif.priority === 'high') {
+        this.notifDialogQueue.push(notif);
+        if (!this.notifDialogActive) this.processNotifDialogQueue();
+      }
+    }
+  }
+
+  private refreshNotifBadge(): void {
+    const count = this.notificationStorage.getUnreadCount(this.userService.getLoggedUser().id);
+    this.notifBadge.classList.toggle('notif-bell-dot--hidden', count === 0);
+  }
+
+  private processNotifDialogQueue(): void {
+    if (this.notifDialogQueue.length === 0) {
+      this.notifDialogActive = false;
+      return;
+    }
+    this.notifDialogActive = true;
+    const notif = this.notifDialogQueue.shift()!;
+    this.notifDialogTitle.textContent = notif.title;
+    this.notifDialogMessage.textContent = notif.message;
+    this.notifDialogPriority.textContent = PRIORITY_LABELS[notif.priority];
+    this.notifDialogPriority.className = `priority-badge priority-badge--${notif.priority}`;
+    this.notifDialogViewBtn.onclick = () => {
+      this.dismissNotifDialog();
+      this.showNotifDetail(notif.id);
+    };
+    this.notifDialog.classList.remove('notif-dialog--hidden');
+  }
+
+  private dismissNotifDialog(): void {
+    this.notifDialog.classList.add('notif-dialog--hidden');
+    setTimeout(() => this.processNotifDialogQueue(), 300);
   }
 }
