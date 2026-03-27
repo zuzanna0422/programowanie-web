@@ -58,10 +58,6 @@ export class ProjectStorage {
   }
 
   private saveAll(projects: Project[]): void {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
-    } catch {
-      console.error('ManageMe: failed to save projects');
-    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
   }
 }

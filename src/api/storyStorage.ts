@@ -23,11 +23,7 @@ export class StoryStorage {
   }
 
   private saveAll(stories: Story[]): void {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(stories));
-    } catch {
-      console.error('ManageMe: failed to save stories');
-    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(stories));
   }
 
   getAllByProject(projectId: string): Story[] {
