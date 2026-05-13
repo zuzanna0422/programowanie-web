@@ -1,4 +1,5 @@
 import { Notification, UserID } from '../models/Notification';
+import { storageSetItem } from './storageDriver';
 
 const STORAGE_KEY = 'manageMe:notifications';
 
@@ -13,7 +14,7 @@ export class NotificationStorage {
   }
 
   private save(data: Notification[]): void {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    storageSetItem(STORAGE_KEY, JSON.stringify(data));
   }
 
   create(data: Omit<Notification, 'id' | 'date' | 'isRead'>): Notification {

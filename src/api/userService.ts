@@ -1,41 +1,44 @@
 import { User } from '../models/User';
+import { UserStorage } from './userStorage';
+import { AuthService } from './authService';
 
 export class UserService {
   private static instance: UserService;
-
-  private readonly users: User[] = [
-    { id: 'mock-user-1', firstName: 'Zuzanna', lastName: 'Cholewa', role: 'admin' },
-    { id: 'user-dev-1', firstName: 'Adam', lastName: 'Kowalski', role: 'developer' },
-    { id: 'user-devops-1', firstName: 'Michał', lastName: 'Nowak', role: 'devops' },
-    { id: 'user-dev-2', firstName: 'Katarzyna', lastName: 'Wiśniewska', role: 'developer' },
-  ];
-
-  private readonly loggedUserId = 'mock-user-1';
+  private userStorage = new UserStorage();
+  private authService = AuthService.getInstance();
 
   private constructor() {}
 
   static getInstance(): UserService {
-    if (!UserService.instance) {
-      UserService.instance = new UserService();
-    }
+    if (!UserService.instance) UserService.instance = new UserService();
     return UserService.instance;
   }
 
   getLoggedUser(): User {
-    const user = this.users.find((u) => u.id === this.loggedUserId);
-    if (!user) throw new Error(`Logged user "${this.loggedUserId}" not found in user list`);
+    const session = this.authService.getSession();
+    if (!session) throw new Error('Not authenticated');
+    const user = this.userStorage.getById(session.userId);
+    if (!user) throw new Error(`User not found: ${session.userId}`);
     return user;
   }
 
   getUserById(id: string): User | undefined {
-    return this.users.find((u) => u.id === id);
+    return this.userStorage.getById(id);
   }
 
   getAllUsers(): User[] {
-    return this.users;
+    return this.userStorage.getAll();
   }
 
   getAssignableUsers(): User[] {
-    return this.users.filter((u) => u.role === 'developer' || u.role === 'devops');
+    return this.userStorage.getAssignable();
+  }
+
+  getSelectableForStory(): User[] {
+    return this.userStorage.getSelectableForStory();
+  }
+
+  updateUser(user: User): void {
+    this.userStorage.upsert(user);
   }
 }

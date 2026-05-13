@@ -1,4 +1,5 @@
 import { safeParse } from './utils';
+import { storageRemoveItem, storageSetItem } from './storageDriver';
 
 export interface Project {
   id: string;
@@ -51,13 +52,13 @@ export class ProjectStorage {
 
   setActiveProjectId(id: string | null): void {
     if (id === null) {
-      localStorage.removeItem(ACTIVE_KEY);
+      storageRemoveItem(ACTIVE_KEY);
     } else {
-      localStorage.setItem(ACTIVE_KEY, id);
+      storageSetItem(ACTIVE_KEY, id);
     }
   }
 
   private saveAll(projects: Project[]): void {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
+    storageSetItem(STORAGE_KEY, JSON.stringify(projects));
   }
 }

@@ -1,5 +1,6 @@
 import { Task, TaskCreatePayload } from '../models/Task';
 import { safeParse } from './utils';
+import { storageSetItem } from './storageDriver';
 
 const STORAGE_KEY = 'manageMe:tasks';
 const UID_KEY = 'manageMe:task_uid';
@@ -8,7 +9,7 @@ export class TaskStorage {
   private nextUid(): number {
     const current = parseInt(localStorage.getItem(UID_KEY) ?? '200000', 10);
     const next = current + 1;
-    localStorage.setItem(UID_KEY, String(next));
+    storageSetItem(UID_KEY, String(next));
     return next;
   }
 
@@ -17,7 +18,7 @@ export class TaskStorage {
   }
 
   private saveAll(tasks: Task[]): void {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+    storageSetItem(STORAGE_KEY, JSON.stringify(tasks));
   }
 
   getAllByStory(storyId: string): Task[] {

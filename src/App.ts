@@ -7,6 +7,8 @@ import { User } from './models/User';
 import { UserService } from './api/userService';
 import { Notification as AppNotification } from './models/Notification';
 import { NotificationStorage } from './api/notificationStorage';
+import { AuthService } from './api/authService';
+import { UserRole } from './models/User';
 import trashSvg from './assets/icons/trash.svg?raw';
 import editSvg from './assets/icons/edit.svg?raw';
 import bookSvg from './assets/icons/book.svg?raw';
@@ -25,7 +27,7 @@ const el = <K extends keyof HTMLElementTagNameMap>(
 const PRIORITY_LABELS: Record<TaskPriority, string> = { low: 'Low', medium: 'Medium', high: 'High' };
 const STORY_STATUS_LABELS: Record<StoryStatus, string> = { todo: 'New', doing: 'In Progress', done: 'Done' };
 const TASK_STATUS_LABELS: Record<TaskStatus, string> = { todo: 'To Do', doing: 'Doing', done: 'Done' };
-const ROLE_LABELS: Record<string, string> = { admin: 'Admin', developer: 'Developer', devops: 'DevOps' };
+const ROLE_LABELS: Record<string, string> = { admin: 'Admin', developer: 'Developer', devops: 'DevOps', guest: 'Guest' };
 
 const TASK_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="1.5" width="13" height="13" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M4.5 8l2.5 2.5 4.5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
@@ -92,6 +94,10 @@ export class App {
   private taskDetailContent!: HTMLElement;
   private taskDetailBackLabel!: HTMLSpanElement;
 
+  // Users view DOM
+  private usersView!: HTMLElement;
+  private usersListContent!: HTMLElement;
+
   // Notification views DOM
   private notifBadge!: HTMLElement;
   private notifListView!: HTMLElement;
@@ -131,6 +137,7 @@ export class App {
     this.buildNotifListView();
     this.buildNotifDetailView();
     this.buildNotifDialog();
+    this.buildUsersView();
 
     this.root.append(
       this.buildHeader(),
@@ -139,6 +146,7 @@ export class App {
       this.taskDetailView,
       this.notifListView,
       this.notifDetailView,
+      this.usersView,
       this.taskFormModal,
       this.notifDialog,
     );
@@ -179,10 +187,27 @@ export class App {
 
     const userInfo = el('div', 'app-header__user');
     const avatar = el('span', 'user-avatar', `${user.firstName[0]}${user.lastName[0]}`);
-    const name = el('span', 'user-name', `${user.firstName} ${user.lastName}`);
-    userInfo.append(avatar, name);
+    const userName = el('span', 'user-name', `${user.firstName} ${user.lastName}`);
+    userInfo.append(avatar, userName);
 
-    right.append(themeBtn, notifBellWrapper, userInfo);
+    right.append(themeBtn, notifBellWrapper);
+
+    if (user.role === 'admin') {
+      const usersBtn = el('button', 'notif-nav-link', 'Users');
+      usersBtn.type = 'button';
+      usersBtn.addEventListener('click', () => this.showUsersView());
+      right.append(usersBtn);
+    }
+
+    const signOutBtn = el('button', 'notif-nav-link', 'Sign out');
+    signOutBtn.type = 'button';
+    signOutBtn.addEventListener('click', () => {
+      AuthService.getInstance().clearSession();
+      if (window.google?.accounts?.id) window.google.accounts.id.disableAutoSelect();
+      window.location.reload();
+    });
+
+    right.append(userInfo, signOutBtn);
     header.append(brand, right);
     return header;
   }
@@ -420,6 +445,7 @@ export class App {
     this.taskDetailView.classList.add('view--hidden');
     this.notifListView.classList.add('view--hidden');
     this.notifDetailView.classList.add('view--hidden');
+    this.usersView.classList.add('view--hidden');
     this.cancelStoryForm();
     this.refreshStories();
   }
@@ -430,6 +456,7 @@ export class App {
     this.taskDetailView.classList.add('view--hidden');
     this.notifListView.classList.add('view--hidden');
     this.notifDetailView.classList.add('view--hidden');
+    this.usersView.classList.add('view--hidden');
     this.refresh();
   }
 
@@ -484,16 +511,6 @@ export class App {
     });
 
     this.storyAssigneeSelect = el('select');
-    const unassignedOpt = el('option');
-    unassignedOpt.value = '';
-    unassignedOpt.textContent = 'Unassigned';
-    this.storyAssigneeSelect.append(unassignedOpt);
-    this.userService.getAllUsers().forEach((u) => {
-      const opt = el('option');
-      opt.value = u.id;
-      opt.textContent = `${u.firstName} ${u.lastName}`;
-      this.storyAssigneeSelect.append(opt);
-    });
 
     this.storySubmitBtn = el('button', 'button button-primary', 'Save');
     this.storySubmitBtn.type = 'submit';
@@ -531,6 +548,19 @@ export class App {
   private openStoryForm(id?: string) {
     this.currentEditStoryId = id ?? null;
     this.storyForm.reset();
+
+    // Rebuild assignee options with current users
+    this.storyAssigneeSelect.innerHTML = '';
+    const unassignedOpt = el('option');
+    unassignedOpt.value = '';
+    unassignedOpt.textContent = 'Unassigned';
+    this.storyAssigneeSelect.append(unassignedOpt);
+    this.userService.getSelectableForStory().forEach((u) => {
+      const opt = el('option');
+      opt.value = u.id;
+      opt.textContent = `${u.firstName} ${u.lastName}`;
+      this.storyAssigneeSelect.append(opt);
+    });
 
     if (id) {
       const story = this.storyStorage.getById(id);
@@ -648,7 +678,6 @@ export class App {
     }
     this.storiesSection.classList.remove('stories-section--hidden');
 
-    const user = this.userService.getLoggedUser();
     const stories = this.storyStorage.getAllByProject(activeId);
     this.storyList.innerHTML = '';
 
@@ -670,13 +699,16 @@ export class App {
     table.append(header);
 
     stories.forEach((story) => {
-      const group = this.buildStoryGroup(story, user.firstName, user.lastName);
+      const group = this.buildStoryGroup(story);
       table.append(group);
     });
     this.storyList.append(table);
   }
 
-  private buildStoryGroup(story: Story, firstName: string, lastName: string): HTMLElement {
+  private buildStoryGroup(story: Story): HTMLElement {
+    const owner = this.userService.getUserById(story.ownerId);
+    const firstName = owner?.firstName ?? 'Unknown';
+    const lastName = owner?.lastName ?? '';
     const group = el('div', 'story-group');
 
     const isExpanded = this.expandedStoryIds.has(story.id);
@@ -1149,6 +1181,7 @@ export class App {
     this.taskDetailView.classList.remove('view--hidden');
     this.notifListView.classList.add('view--hidden');
     this.notifDetailView.classList.add('view--hidden');
+    this.usersView.classList.add('view--hidden');
     this.renderTaskDetailContent();
   }
 
@@ -1469,7 +1502,7 @@ export class App {
   private buildNotifDetailView(): void {
     this.notifDetailView = el('div', 'view view-notif-detail view--hidden');
 
-    const backBtn = el('button', 'button button-back', '← Back to Notifications');
+    const backBtn = el('button', 'button button-back', '← Back');
     backBtn.type = 'button';
     backBtn.addEventListener('click', () => this.backFromNotifDetail());
 
@@ -1511,6 +1544,7 @@ export class App {
     this.detailSection.classList.add('view--hidden');
     this.taskDetailView.classList.add('view--hidden');
     this.notifDetailView.classList.add('view--hidden');
+    this.usersView.classList.add('view--hidden');
     this.notifListView.classList.remove('view--hidden');
     this.renderNotifList();
   }
@@ -1523,6 +1557,7 @@ export class App {
     this.detailSection.classList.add('view--hidden');
     this.taskDetailView.classList.add('view--hidden');
     this.notifListView.classList.add('view--hidden');
+    this.usersView.classList.add('view--hidden');
     this.notifDetailView.classList.remove('view--hidden');
     this.renderNotifDetail(id);
   }
@@ -1663,5 +1698,85 @@ export class App {
   private dismissNotifDialog(): void {
     this.notifDialog.classList.add('notif-dialog--hidden');
     setTimeout(() => this.processNotifDialogQueue(), 300);
+  }
+
+  // ─── Users management view ────────────────────────────────────────────────────
+
+  private buildUsersView(): void {
+    this.usersView = el('div', 'view view-users view--hidden');
+
+    const backBtn = el('button', 'button button-back', '← Back');
+    backBtn.type = 'button';
+    backBtn.addEventListener('click', () => this.backFromUsersView());
+
+    const header = el('div', 'notif-list-header');
+    header.append(el('h2', undefined, 'User Management'));
+
+    this.usersListContent = el('div', 'users-list');
+    this.usersView.append(backBtn, header, this.usersListContent);
+  }
+
+  private showUsersView(): void {
+    this.mainView.classList.add('view--hidden');
+    this.detailSection.classList.add('view--hidden');
+    this.taskDetailView.classList.add('view--hidden');
+    this.notifListView.classList.add('view--hidden');
+    this.notifDetailView.classList.add('view--hidden');
+    this.usersView.classList.remove('view--hidden');
+    this.renderUsersList();
+  }
+
+  private backFromUsersView(): void {
+    this.usersView.classList.add('view--hidden');
+    this.restorePreviousView();
+  }
+
+  private renderUsersList(): void {
+    const users = this.userService.getAllUsers();
+    const currentUser = this.userService.getLoggedUser();
+    this.usersListContent.innerHTML = '';
+
+    if (users.length === 0) {
+      this.usersListContent.append(el('p', 'empty-state', 'No users yet.'));
+      return;
+    }
+
+    const roles: UserRole[] = ['admin', 'devops', 'developer', 'guest'];
+
+    users.forEach((u) => {
+      const isSelf = u.id === currentUser.id;
+      const row = el('div', `user-mgmt-row${u.isBlocked ? ' user-mgmt-row--blocked' : ''}`);
+
+      const avatarEl = el('span', 'user-avatar user-avatar--sm', `${u.firstName[0]}${u.lastName[0]}`);
+
+      const info = el('div', 'user-mgmt-info');
+      info.append(el('span', 'user-mgmt-name', `${u.firstName} ${u.lastName}`));
+      info.append(el('span', 'user-mgmt-email', u.email));
+
+      const roleSelect = el('select', 'user-mgmt-role-select');
+      roles.forEach((r) => {
+        const opt = el('option');
+        opt.value = r;
+        opt.textContent = ROLE_LABELS[r];
+        if (r === u.role) opt.selected = true;
+        roleSelect.append(opt);
+      });
+      roleSelect.disabled = isSelf;
+      roleSelect.addEventListener('change', () => {
+        this.userService.updateUser({ ...u, role: roleSelect.value as UserRole });
+        this.renderUsersList();
+      });
+
+      const blockBtn = el('button', `button ${u.isBlocked ? 'user-mgmt-btn--unblock' : 'user-mgmt-btn--block'}`, u.isBlocked ? 'Unblock' : 'Block');
+      blockBtn.type = 'button';
+      blockBtn.disabled = isSelf;
+      blockBtn.addEventListener('click', () => {
+        this.userService.updateUser({ ...u, isBlocked: !u.isBlocked });
+        this.renderUsersList();
+      });
+
+      row.append(avatarEl, info, roleSelect, blockBtn);
+      this.usersListContent.append(row);
+    });
   }
 }

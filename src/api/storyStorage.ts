@@ -1,5 +1,6 @@
 import { Story, StoryCreatePayload } from '../models/Story';
 import { safeParse } from './utils';
+import { storageSetItem } from './storageDriver';
 
 const STORAGE_KEY = 'manageMe:stories';
 const UID_KEY = 'manageMe:story_uid';
@@ -8,7 +9,7 @@ export class StoryStorage {
   private nextUid(): number {
     const current = parseInt(localStorage.getItem(UID_KEY) ?? '100000', 10);
     const next = current + 1;
-    localStorage.setItem(UID_KEY, String(next));
+    storageSetItem(UID_KEY, String(next));
     return next;
   }
 
@@ -23,7 +24,7 @@ export class StoryStorage {
   }
 
   private saveAll(stories: Story[]): void {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(stories));
+    storageSetItem(STORAGE_KEY, JSON.stringify(stories));
   }
 
   getAllByProject(projectId: string): Story[] {

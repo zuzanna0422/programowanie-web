@@ -1696,3 +1696,204 @@ button:hover {
   from { opacity: 0; transform: translateY(16px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+
+/* ─── Auth screens (login / guest / blocked) ─────────────────────────────── */
+
+.auth-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg);
+  padding: 24px;
+}
+
+.auth-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+  padding: 40px 36px;
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  box-shadow: var(--shadow-modal);
+}
+
+.auth-logo {
+  margin: 0;
+  font-size: 1.9rem;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+.auth-tagline {
+  margin: 0;
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+.auth-error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-danger-text);
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger);
+  border-radius: 8px;
+  padding: 10px 14px;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.google-btn-wrapper {
+  margin-top: 6px;
+}
+
+.auth-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--color-brand);
+  color: white;
+  font-size: 18px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.auth-user-name {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.auth-user-email {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.auth-state-icon {
+  font-size: 2.5rem;
+  line-height: 1;
+  margin: 4px 0;
+}
+
+.auth-state-heading {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.auth-state-desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  text-align: center;
+  line-height: 1.6;
+}
+
+.auth-btn {
+  width: 100%;
+  justify-content: center;
+}
+
+/* ─── User management view ───────────────────────────────────────────────── */
+
+.users-list {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.user-mgmt-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--color-border-subtle);
+  transition: background 0.1s;
+}
+
+.user-mgmt-row:last-child {
+  border-bottom: none;
+}
+
+.user-mgmt-row:hover {
+  background: var(--color-surface-subtle);
+}
+
+.user-mgmt-row--blocked {
+  opacity: 0.6;
+}
+
+.user-mgmt-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.user-mgmt-name {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-mgmt-email {
+  font-size: 12px;
+  color: var(--color-text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-mgmt-role-select {
+  width: auto;
+  flex-shrink: 0;
+  padding: 6px 10px;
+  font-size: 13px;
+  border-radius: 8px;
+}
+
+.user-mgmt-btn--block {
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
+  border: 1px solid var(--color-danger);
+  font-size: 13px;
+  padding: 6px 14px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.user-mgmt-btn--block:hover {
+  background: var(--color-danger);
+  color: white;
+  opacity: 1;
+}
+
+.user-mgmt-btn--unblock {
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
+  border: 1px solid var(--color-success);
+  font-size: 13px;
+  padding: 6px 14px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.user-mgmt-btn--unblock:hover {
+  background: var(--color-success);
+  color: white;
+  opacity: 1;
+}
