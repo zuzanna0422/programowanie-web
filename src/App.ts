@@ -24,6 +24,11 @@ const el = <K extends keyof HTMLElementTagNameMap>(
   return e;
 };
 
+const testId = <T extends HTMLElement>(node: T, id: string): T => {
+  node.dataset.testid = id;
+  return node;
+};
+
 const PRIORITY_LABELS: Record<TaskPriority, string> = { low: 'Low', medium: 'Medium', high: 'High' };
 const STORY_STATUS_LABELS: Record<StoryStatus, string> = { todo: 'New', doing: 'In Progress', done: 'Done' };
 const TASK_STATUS_LABELS: Record<TaskStatus, string> = { todo: 'To Do', doing: 'Doing', done: 'Done' };
@@ -258,22 +263,22 @@ export class App {
 
     const titleBar = el('div', 'section-title-bar');
     const h2 = el('h2', undefined, 'Projects');
-    const addBtn = el('button', 'button button-primary', '+ Add project');
+    const addBtn = testId(el('button', 'button button-primary', '+ Add project'), 'add-project-button');
     addBtn.type = 'button';
     addBtn.addEventListener('click', () => this.toggleProjectForm());
     titleBar.append(h2, addBtn);
 
     this.projectFormWrapper = el('div', 'form-wrapper form-wrapper--hidden');
-    this.projectForm = el('form', 'form-card');
-    this.projectNameInput = el('input');
+    this.projectForm = testId(el('form', 'form-card'), 'project-form');
+    this.projectNameInput = testId(el('input'), 'project-name-input');
     this.projectNameInput.type = 'text';
     this.projectNameInput.placeholder = 'Project name';
     this.projectNameInput.required = true;
-    this.projectDescInput = el('textarea');
+    this.projectDescInput = testId(el('textarea'), 'project-description-input');
     this.projectDescInput.placeholder = 'Project description';
     this.projectDescInput.rows = 3;
     this.projectDescInput.required = true;
-    this.projectSubmitBtn = el('button', 'button button-primary', 'Save');
+    this.projectSubmitBtn = testId(el('button', 'button button-primary', 'Save'), 'project-submit-button');
     this.projectSubmitBtn.type = 'submit';
     const cancelBtn = el('button', 'button button-cancel', 'Cancel');
     cancelBtn.type = 'button';
@@ -467,7 +472,7 @@ export class App {
 
     const titleBar = el('div', 'section-title-bar');
     const h2 = el('h2', undefined, 'Stories');
-    const addBtn = el('button', 'button button-primary', '+ Add story');
+    const addBtn = testId(el('button', 'button button-primary', '+ Add story'), 'add-story-button');
     addBtn.type = 'button';
     addBtn.addEventListener('click', () => this.openStoryForm());
     titleBar.append(h2, addBtn);
@@ -482,19 +487,19 @@ export class App {
     closeBtn.addEventListener('click', () => this.closeStoryForm());
     modalHeader.append(this.storyFormTitle, closeBtn);
 
-    this.storyForm = el('form', 'form-card modal-form');
+    this.storyForm = testId(el('form', 'form-card modal-form'), 'story-form');
 
-    this.storyNameInput = el('input');
+    this.storyNameInput = testId(el('input'), 'story-title-input');
     this.storyNameInput.type = 'text';
     this.storyNameInput.placeholder = 'Story title';
     this.storyNameInput.required = true;
 
-    this.storyDescInput = el('textarea');
+    this.storyDescInput = testId(el('textarea'), 'story-description-input');
     this.storyDescInput.placeholder = 'Story description';
     this.storyDescInput.rows = 3;
     this.storyDescInput.required = true;
 
-    this.storyPrioritySelect = el('select');
+    this.storyPrioritySelect = testId(el('select'), 'story-priority-select');
     (['low', 'medium', 'high'] as Priority[]).forEach((p) => {
       const opt = el('option');
       opt.value = p;
@@ -502,7 +507,7 @@ export class App {
       this.storyPrioritySelect.append(opt);
     });
 
-    this.storyStatusSelect = el('select');
+    this.storyStatusSelect = testId(el('select'), 'story-status-select');
     (['todo', 'doing', 'done'] as StoryStatus[]).forEach((s) => {
       const opt = el('option');
       opt.value = s;
@@ -510,9 +515,9 @@ export class App {
       this.storyStatusSelect.append(opt);
     });
 
-    this.storyAssigneeSelect = el('select');
+    this.storyAssigneeSelect = testId(el('select'), 'story-assignee-select');
 
-    this.storySubmitBtn = el('button', 'button button-primary', 'Save');
+    this.storySubmitBtn = testId(el('button', 'button button-primary', 'Save'), 'story-submit-button');
     this.storySubmitBtn.type = 'submit';
     const cancelStoryBtn = el('button', 'button button-cancel', 'Cancel');
     cancelStoryBtn.type = 'button';
@@ -709,19 +714,19 @@ export class App {
     const owner = this.userService.getUserById(story.ownerId);
     const firstName = owner?.firstName ?? 'Unknown';
     const lastName = owner?.lastName ?? '';
-    const group = el('div', 'story-group');
+    const group = testId(el('div', 'story-group'), 'story-group');
 
     const isExpanded = this.expandedStoryIds.has(story.id);
     const tasks = this.taskStorage.getAllByStory(story.id);
 
     // Expand toggle
-    const expandBtn = el('button', 'expand-btn');
+    const expandBtn = testId(el('button', 'expand-btn'), 'story-expand-button');
     expandBtn.type = 'button';
     expandBtn.title = isExpanded ? 'Collapse' : 'Expand tasks';
     expandBtn.innerHTML = isExpanded ? '&#9660;' : '&#9658;';
     if (tasks.length === 0) expandBtn.classList.add('expand-btn--empty');
 
-    const row = el('div', `story-row story-row--${story.status}`);
+    const row = testId(el('div', `story-row story-row--${story.status}`), 'story-row');
 
     const idCell = el('span', 'story-col-id story-row__id', String(story.uid));
 
@@ -750,20 +755,20 @@ export class App {
     const priorityCell = el('span', 'story-col-priority');
     priorityCell.append(el('span', `priority-badge priority-badge--${story.priority}`, PRIORITY_LABELS[story.priority]));
 
-    const stateBtn = el('button', 'story-col-state story-row__state');
+    const stateBtn = testId(el('button', 'story-col-state story-row__state'), 'story-status-button');
     stateBtn.type = 'button';
     stateBtn.title = 'Click to advance state';
     stateBtn.append(el('span', `state-dot state-dot--${story.status}`), el('span', undefined, STORY_STATUS_LABELS[story.status]));
     stateBtn.addEventListener('click', (e) => { e.stopPropagation(); this.cycleStoryStatus(story.id); });
 
     const actionsCell = el('div', 'story-col-actions story-row__actions');
-    const editBtn = el('button', 'button button-icon button-icon--edit');
+    const editBtn = testId(el('button', 'button button-icon button-icon--edit'), 'edit-story-button');
     editBtn.type = 'button';
     editBtn.title = 'Edit story';
     editBtn.setAttribute('aria-label', 'Edit story');
     editBtn.innerHTML = editSvg;
     editBtn.addEventListener('click', (e) => { e.stopPropagation(); this.loadStoryForEdit(story.id); });
-    const deleteBtn = el('button', 'button button-icon button-icon--delete');
+    const deleteBtn = testId(el('button', 'button button-icon button-icon--delete'), 'delete-story-button');
     deleteBtn.type = 'button';
     deleteBtn.title = 'Delete story';
     deleteBtn.setAttribute('aria-label', 'Delete story');
@@ -776,14 +781,12 @@ export class App {
     // Expansion panel
     const expansion = el('div', `story-expansion${isExpanded ? '' : ' story-expansion--hidden'}`);
     const taskListEl = el('div', 'task-list');
-    if (tasks.length === 0) {
-      taskListEl.append(el('p', 'empty-state empty-state--sm', 'No tasks yet.'));
-    } else {
+    if (tasks.length > 0) {
       tasks.forEach((task) => taskListEl.append(this.buildTaskRow(task, story)));
     }
 
     const addTaskBar = el('div', 'task-add-bar');
-    const addTaskBtn = el('button', 'button button-add-task', '+ Add task');
+    const addTaskBtn = testId(el('button', 'button button-add-task', '+ Add task'), 'add-task-button');
     addTaskBtn.type = 'button';
     addTaskBtn.addEventListener('click', () => this.openTaskForm(story.id));
     addTaskBar.append(addTaskBtn);
@@ -806,7 +809,7 @@ export class App {
   }
 
   private buildTaskRow(task: Task, story: Story): HTMLElement {
-    const row = el('div', `task-row task-row--${task.status}`);
+    const row = testId(el('div', `task-row task-row--${task.status}`), 'task-row');
 
     const expandCell = el('span', 'story-col-expand');
     const idCell = el('span', 'story-col-id task-row__id', String(task.uid));
@@ -833,7 +836,7 @@ export class App {
     const priorityCell = el('span', 'task-row__priority');
     priorityCell.append(el('span', `priority-badge priority-badge--${task.priority}`, PRIORITY_LABELS[task.priority]));
 
-    const statusCell = el('button', 'story-col-state task-row__status');
+    const statusCell = testId(el('button', 'story-col-state task-row__status'), 'task-status-button');
     statusCell.type = 'button';
     statusCell.title = 'Click to advance state';
     statusCell.append(el('span', `state-dot state-dot--${task.status}`), el('span', 'task-row__status-text', TASK_STATUS_LABELS[task.status]));
@@ -841,13 +844,13 @@ export class App {
 
     const actions = el('div', 'task-row__actions');
 
-    const editBtn = el('button', 'button button-icon button-icon--edit');
+    const editBtn = testId(el('button', 'button button-icon button-icon--edit'), 'edit-task-button');
     editBtn.type = 'button';
     editBtn.title = 'Edit task';
     editBtn.innerHTML = editSvg;
     editBtn.addEventListener('click', () => this.openTaskForm(story.id, task.id));
 
-    const deleteBtn = el('button', 'button button-icon button-icon--delete');
+    const deleteBtn = testId(el('button', 'button button-icon button-icon--delete'), 'delete-task-button');
     deleteBtn.type = 'button';
     deleteBtn.title = 'Delete task';
     deleteBtn.innerHTML = trashSvg;
@@ -1012,20 +1015,20 @@ export class App {
 
     const form = el('form', 'form-card modal-form');
 
-    this.taskFormStorySelect = el('select');
+    this.taskFormStorySelect = testId(el('select'), 'task-story-select');
     this.taskFormStorySelect.required = true;
 
-    this.taskNameInput = el('input');
+    this.taskNameInput = testId(el('input'), 'task-name-input');
     this.taskNameInput.type = 'text';
     this.taskNameInput.placeholder = 'Task name';
     this.taskNameInput.required = true;
 
-    this.taskDescInput = el('textarea');
+    this.taskDescInput = testId(el('textarea'), 'task-description-input');
     this.taskDescInput.placeholder = 'Task description';
     this.taskDescInput.rows = 3;
     this.taskDescInput.required = true;
 
-    this.taskPrioritySelect = el('select');
+    this.taskPrioritySelect = testId(el('select'), 'task-priority-select');
     (['low', 'medium', 'high'] as TaskPriority[]).forEach((p) => {
       const opt = el('option');
       opt.value = p;
@@ -1033,7 +1036,7 @@ export class App {
       this.taskPrioritySelect.append(opt);
     });
 
-    this.taskEstHoursInput = el('input');
+    this.taskEstHoursInput = testId(el('input'), 'task-estimated-hours-input');
     this.taskEstHoursInput.type = 'number';
     this.taskEstHoursInput.min = '0.5';
     this.taskEstHoursInput.step = '0.5';
@@ -1046,7 +1049,7 @@ export class App {
       this.createField('Estimated hours', this.taskEstHoursInput),
     );
 
-    this.taskFormSubmitBtn = el('button', 'button button-primary', 'Save');
+    this.taskFormSubmitBtn = testId(el('button', 'button button-primary', 'Save'), 'task-submit-button');
     this.taskFormSubmitBtn.type = 'submit';
     const cancelBtn = el('button', 'button button-cancel', 'Cancel');
     cancelBtn.type = 'button';
@@ -1414,7 +1417,7 @@ export class App {
 
   private buildProjectCard(project: Project, activeId: string | null, container: HTMLElement) {
     const isActive = project.id === activeId;
-    const card = el('article', `project-card${isActive ? ' project-card--active' : ''}`);
+    const card = testId(el('article', `project-card${isActive ? ' project-card--active' : ''}`), 'project-card');
     card.addEventListener('click', () => this.showProjectDetail(project.id));
 
     const content = el('div', 'project-card__content');
@@ -1427,14 +1430,14 @@ export class App {
 
     const actions = el('div', 'project-actions');
 
-    const editBtn = el('button', 'button button-icon button-icon--edit');
+    const editBtn = testId(el('button', 'button button-icon button-icon--edit'), 'edit-project-button');
     editBtn.type = 'button';
     editBtn.title = 'Edit project';
     editBtn.setAttribute('aria-label', 'Edit project');
     editBtn.innerHTML = editSvg;
     editBtn.addEventListener('click', (e) => { e.stopPropagation(); this.loadProjectForEdit(project.id); });
 
-    const deleteBtn = el('button', 'button button-icon button-icon--delete');
+    const deleteBtn = testId(el('button', 'button button-icon button-icon--delete'), 'delete-project-button');
     deleteBtn.type = 'button';
     deleteBtn.title = 'Delete project';
     deleteBtn.setAttribute('aria-label', 'Delete project');
